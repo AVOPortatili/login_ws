@@ -1,0 +1,19 @@
+{
+  "name": "login_management",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "servizio web per il login al servizio di gestione dei computer",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Barbera Mario, Como Andrea",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "argon2": "^0.40.1",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mysql": "^2.18.1"
+  }
+}
