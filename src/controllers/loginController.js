@@ -51,7 +51,7 @@ router.post('/register',   async (req, res) =>  { //metodo di testing per regist
         return res.status(401).json({message : "Invalid request"})
     }
     try {
-        pool.query('INSERT INTO Login VALUES(1, ?, ?, 1)', [credentials.username, await argon2.hash(credentials.password)], (error, results, fields) => {
+        pool.query('INSERT INTO login (username, password, utente) VALUES(?, ?, ?)', [credentials.username, await argon2.hash(credentials.password), req.body.utente], (error, results, fields) => {
             console.log(results);
             console.log(fields);
             console.log(error);
