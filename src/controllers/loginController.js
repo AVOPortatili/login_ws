@@ -4,8 +4,8 @@ import jwt from "jsonwebtoken";
 import argon2 from "argon2";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-dotenv.config();
 
+dotenv.config();
 
 let activeTokens = [];
 const router = Router();
@@ -65,7 +65,6 @@ router.post('/user/register',   async (req, res) =>  {
         return res.status(401).json({message : "Invalid request"})
     }
     try {
-
         return await pool.query('INSERT INTO utenti VALUES(?,?,?,?,?)', [null, user_info.nome, user_info.cognome, user_info.email, user_info.ruolo], (error, results, fields) => {
             console.log("INSERTING INTO utenti (id, nome, cognome, email, ruolo)");
             console.log("results= " + JSON.stringify(results));
@@ -79,8 +78,7 @@ router.post('/user/register',   async (req, res) =>  {
             console.log("sending response")
             res.status(200).json({message : "user created successfully"});
             return set_credentials(username, password, id, res)
-        }); 
-
+        });
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Internal server error' });
@@ -88,10 +86,11 @@ router.post('/user/register',   async (req, res) =>  {
 })
 
 router.post('/user/credentials',   async (req, res) =>  { //metodo di testing per registrare utenti e memorizzarne la password cifrata e salata da argon2
+    //todo: aggiungi controllo della vecchia password
     const body = req.body;
     try{
-        const ret =  await set_credentials(body.username, body.password, body.userId, res)
-        res.status(200).json({message : "credentials created"});
+        return await set_credentials(body.username, body.password, body.userId, res)
+            .then(() => res.status(200).json({message : "credentials created"}))
     } catch (e) {
         console.error(e);
     }
