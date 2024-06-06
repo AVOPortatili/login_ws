@@ -65,6 +65,7 @@ router.post('/user/register',   async (req, res) =>  {
         return res.status(401).json({message : "Invalid request"})
     }
     try {
+
         return await pool.query('INSERT INTO utenti VALUES(?,?,?,?,?)', [null, user_info.nome, user_info.cognome, user_info.email, user_info.ruolo], (error, results, fields) => {
             console.log("INSERTING INTO utenti (id, nome, cognome, email, ruolo)");
             console.log("results= " + JSON.stringify(results));
@@ -78,7 +79,7 @@ router.post('/user/register',   async (req, res) =>  {
             console.log("sending response")
             res.status(200).json({message : "user created successfully"});
             return set_credentials(username, password, id, res)
-        });
+        }); 
 
     } catch (error) {
         console.error(error);
@@ -94,8 +95,6 @@ router.post('/user/credentials',   async (req, res) =>  { //metodo di testing pe
     } catch (e) {
         console.error(e);
     }
-
-
 })
 
 router.post('/verify', async (req, res) => {
