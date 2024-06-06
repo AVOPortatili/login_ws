@@ -42,6 +42,7 @@ router.post('/login',   async (req, res) =>  {
     try {
         const rows = await pool.query('SELECT password, ruolo FROM login l INNER JOIN utenti u ON u.id=l.utente WHERE username = ?', [credentials.username], async (error, results, fields) => {
             if (results && results.length>0) {
+                console.log(await argon2.verify(results[0].password, credentials.password))
                 if (await argon2.verify(results[0].password, credentials.password)) {
                     const token = jwt.sign({ username: credentials.username }, getSecretKey(), { expiresIn: '1h' });
                     activeTokens.push({token: token, address: req.ip})
@@ -59,8 +60,9 @@ router.post('/login',   async (req, res) =>  {
     }
 })
 
-router.post('/user/register',   async (req, res) =>  {
+router.post('/register',   async (req, res) =>  {
     const user_info = req.body;
+    console.log(user_info)
     if (!user_info.nome || !user_info.cognome || !user_info.email || !user_info.ruolo) {
         return res.status(401).json({message : "Invalid request"})
     }
@@ -72,11 +74,10 @@ router.post('/user/register',   async (req, res) =>  {
             console.log("error= "   + error);
             console.log("-----------------------------")
             const id = results.insertId;
-            const username = user_info.nome[0].replaceAll(' ', '').concat(user_info.cognome.replaceAll(' ', ''));
+            const username = (user_info.nome[0].replaceAll(' ', '').concat(user_info.cognome.replaceAll(' ', ''))).toLowerCase();
             const password  = generateString(7);
-            send_email(username, password, user_info.email)
+            send_email(user_info.email, 'Credenziali Ritiro PC', 'Ecco le credenziali per accedere alla piattaforma:\nusername:\'' + username + "\', password:\'" + password + '\'')
             console.log("sending response")
-            res.status(200).json({message : "user created successfully"});
             return set_credentials(username, password, id, res)
         });
     } catch (error) {
@@ -85,18 +86,42 @@ router.post('/user/register',   async (req, res) =>  {
     }
 })
 
-router.post('/user/credentials',   async (req, res) =>  { //metodo di testing per registrare utenti e memorizzarne la password cifrata e salata da argon2
+router.post('/update',   async (req, res) =>  { //metodo di testing per registrare utenti e memorizzarne la password cifrata e salata da argon2
     //todo: aggiungi controllo della vecchia password
     const body = req.body;
-    try{
-        return await set_credentials(body.username, body.password, body.userId, res)
-            .then(() => res.status(200).json({message : "credentials created"}))
-    } catch (e) {
-        console.error(e);
+    console.log(body)
+    if (!body.username || !body.oldPassword || !body.newPassword) {
+        return res.status(401).json({message : "Invalid request"})
+    }
+    try {
+        const rows = await pool.query('SELECT password, email FROM login l INNER JOIN utenti u ON u.id=l.utente WHERE username = ?', [body.username], async (error, results, fields) => {
+            if (results && results.length>0) {
+                let user_email = results[0].email
+                console.log(user_email)
+                if (await argon2.verify(results[0].password, body.oldPassword)) {
+                    const rows = await pool.query('UPDATE login SET password = ? WHERE username = ?', [await argon2.hash(body.newPassword), body.username], async (error, results, fields) => {
+                        if(error) {
+                            console.log(error)
+                            res.status(500).json({ message: 'Internal server error' });
+                        } else {
+                            res.status(200).json({message: 'success'})
+                            send_email(user_email, "Cambio Password Ritiro PC", "La password sulla piattaforma per il Ritiro PC è stata cambiata!")
+                        }
+                    })
+                } else {
+                    res.status(401).json({message : "Invalid Credentials"})
+                }
+            } else {
+                return res.status(404).json({ message: 'User not found' });
+            }
+        });
+    } catch (error) {
+        console.log(error);
+                            res.status(500).json({ message: 'Internal server error' });
     }
 })
 
-router.post('/verify', async (req, res) => {
+router.post('/token/verify', async (req, res) => {
     let tokenIndex;
     for (let index = 0; index < activeTokens.length; index++) {
         if (activeTokens[index].token===req.body.token && activeTokens[index].address===req.ip) {
@@ -112,7 +137,7 @@ router.post('/verify', async (req, res) => {
 })
 
 const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-const generateString =  (length) => { //placeholder per generare password e username
+const generateString = (length) => { //placeholder per generare password e username
     let result = ' ';
     const charactersLength = characters.length;
     for ( let i = 0; i < length; i++ ) {
@@ -126,25 +151,29 @@ const set_credentials = async (username, password, userId, res) => {
         return res.status(401).json({message : "Invalid request"})
     }
     try {
-        return await pool.query('INSERT INTO login VALUES(?,?,?,?)', [null, username, await argon2.hash(password), userId], (error, results, fields) => {
+        password = password.trim()
+        console.log(password)
+        console.log(await argon2.hash(password))
+        await pool.query('INSERT INTO login VALUES(?,?,?,?)', [null, username, await argon2.hash(password), userId], (error, results, fields) => {
             console.log("TRIED INSERTING INTO login");
             console.log("results= " + JSON.stringify(results));
             console.log("fields= "  + fields);
             console.log("error= "   + error);
             console.log("-----------------------------")
         });
+        return res.status(200).json({message: "success"})
     } catch (error) {
         console.error(error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 }
 
-const send_email = (username, password, emailClient) => {
+const send_email = (emailClient, subject, text) => {
     const mail_options = {
         from: email,
         to: emailClient,
-        subject: 'username e password',
-        text: 'username=\'' + username + "\', password=\'" + password + '\''
+        subject: subject,
+        text: text
     };
     transport.sendMail(mail_options, (error, info) => {
         if (error) {
