@@ -1,28 +1,25 @@
 import {Router} from 'express';
 import { pool } from '../mysqlConnector.js'
 import jwt from "jsonwebtoken";
+import md5 from "md5"
 import argon2 from "argon2";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-
+//Bisognerebbe fare un refactor separando: ws, gestione token e gestione email
 dotenv.config();
 
 let activeTokens = [];
 const router = Router();
 
 //email setup
-const email = "ritiropc@outlook.com"
+const email = process.env.EMAIL_ADDRESS
 const transport = nodemailer.createTransport({
-    service : 'outlook',
+    service : process.env.EMAIL_SERVICE,
     auth : {
         user: email,
         pass: process.env.EMAIL_PASSWORD
     }
 });
-
-function getSecretKey() {
-    return process.env.SECRET_KEY;
-}
 
 function isTokenExpired(token) {
     const payloadBase64 = token.split('.')[1];
@@ -31,8 +28,10 @@ function isTokenExpired(token) {
     const exp = decoded.exp;
     const expired = (Date.now() >= exp * 1000)
     return expired
-  }
-
+}
+function getSecretKey() {
+    return process.env.SECRET_KEY;
+}
 router.post('/login',   async (req, res) =>  {
     console.log(req.ip)
     const credentials = req.body;
@@ -44,7 +43,7 @@ router.post('/login',   async (req, res) =>  {
             if (results && results.length>0) {
                 console.log(await argon2.verify(results[0].password, credentials.password))
                 if (await argon2.verify(results[0].password, credentials.password)) {
-                    const token = jwt.sign({ username: credentials.username }, getSecretKey(), { expiresIn: '1h' });
+                    const token = jwt.sign({ iat: Math.floor(Date.now() / 1000) }, getSecretKey(), { expiresIn: '15m', jwtid: md5(generateString(10)) });
                     activeTokens.push({token: token, address: req.ip})
                     res.status(200).json({message: 'success', role: results[0].ruolo, token});
                 } else {
@@ -87,7 +86,6 @@ router.post('/register',   async (req, res) =>  {
 })
 
 router.post('/update',   async (req, res) =>  { //metodo di testing per registrare utenti e memorizzarne la password cifrata e salata da argon2
-    //todo: aggiungi controllo della vecchia password
     const body = req.body;
     console.log(body)
     if (!body.username || !body.oldPassword || !body.newPassword) {
@@ -117,23 +115,13 @@ router.post('/update',   async (req, res) =>  { //metodo di testing per registra
         });
     } catch (error) {
         console.log(error);
-                            res.status(500).json({ message: 'Internal server error' });
+        res.status(500).json({ message: 'Internal server error' });
     }
 })
 
 router.post('/token/verify', async (req, res) => {
-    let tokenIndex;
-    for (let index = 0; index < activeTokens.length; index++) {
-        if (activeTokens[index].token===req.body.token && activeTokens[index].address===req.ip) {
-            tokenIndex = index;
-            break;
-        }
-    }
-    if (tokenIndex!==undefined && isTokenExpired(activeTokens[tokenIndex].token)!==true) {
-        res.status(200).json({message: "success"})        
-    } else {
-        res.status(200).json({message: "failure"})
-    }
+    verifyToken(req.body.token) ? r = "valid" : r = "not valid" 
+    res.status(200).json({message : r})
 })
 
 const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -141,9 +129,20 @@ const generateString = (length) => { //placeholder per generare password e usern
     let result = ' ';
     const charactersLength = characters.length;
     for ( let i = 0; i < length; i++ ) {
-        result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        result += characters.charAt(Math.floor(Math.random() * charactersLength)); //oh hell nah! Math.random() per una password
     }
     return result;
+}
+
+const verifyToken = async (token) => {
+    let tokenIndex;
+    for (let index = 0; index < activeTokens.length; index++) {
+        if (activeTokens[index].token===token && activeTokens[index].address===req.ip) {
+            tokenIndex = index;
+            break;
+        }
+    }
+    return (tokenIndex!==undefined && isTokenExpired(activeTokens[tokenIndex].token)!==true);
 }
 
 const set_credentials = async (username, password, userId, res) => {
